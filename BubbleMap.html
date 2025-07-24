@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Olympic Bubble Map</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/topojson-client@3"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+
+    #chart-container {
+      display: none;
+      justify-content: center;
+      align-items: center;
+
+      height: 100vh;
+      background: #292929;
+    }
+
+    .chart {
+      width: 100%;
+    }
+
+    /*
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(58, 58, 58, 0.95);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 10;
+      width: 220px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+*/
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(58, 58, 58, 0.95);
+      /* sfondo menu */
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 10;
+      width: 220px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      border: 1px solid #666;
+      color: #f0f0f0;
+    }
+
+    #yearSection {
+      max-height: 160px;
+      overflow-y: auto;
+      border: 1px solid #666;
+      padding: 8px;
+      border-radius: 5px;
+      background-color: #3a3a3a;
+      color: #f0f0f0;
+    }
+
+    /* Personalizzazione scrollbar */
+    #yearSection::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    #yearSection::-webkit-scrollbar-track {
+      background: #2a2a2a;
+    }
+
+    #yearSection::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 3px;
+    }
+
+    #yearSection::-webkit-scrollbar-thumb:hover {
+      background: #aaa;
+    }
+
+    label {
+      color: #f0f0f0;
+    }
+
+    select {
+      background: #292929;
+      color: #f0f0f0;
+      border: 1px solid #666;
+      border-radius: 4px;
+      padding: 4px;
+    }
+
+    /* fine scrollbar */
+
+    #yearButtons {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+
+    button.select-toggle {
+      flex: 1;
+      margin: 0 2px;
+      padding: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      background-color: #444;
+      color: #fff;
+      border: 1px solid #666;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    button.select-toggle:hover {
+      background-color: #666;
+    }
+
+    label,
+    select {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    select {
+      width: 100%;
+      padding: 4px;
+    }
+
+    #map {
+      width: 100vw;
+      height: calc(100vw * 9 / 16);
+      /*background-color: #f0f0f0;*/
+      /*background-color: #333333;*/
+      background-color: #292929;
+      display: block;
+    }
+
+    .country {
+      fill: #525252;
+      stroke: white;
+      stroke-width: 0.5;
+    }
+
+    .bubble {
+      fill-opacity: 0.7;
+      stroke: #333;
+      stroke-width: 0.5;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="tooltip" style="
+  position: absolute;
+  padding: 6px 10px;
+  background: #ffffffdd;
+  color: #000;
+  border-radius: 4px;
+  font-size: 13px;
+  pointer-events: none;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  display: none;
+  z-index: 20;
+"></div>
+
+  <div id="chart-container">
+    <svg id="chart1" class="chart"></svg>
+    <svg id="chart2" class="chart"></svg>
+  </div>
+
+  <div id="controls">
+    <label><strong>📅 Anni:</strong></label>
+    <div id="yearButtons">
+      <button class="select-toggle" id="selectAllYears">Tutti</button>
+      <button class="select-toggle" id="deselectAllYears">Nessuno</button>
+    </div>
+    <div id="yearSection">
+      <div id="yearCheckboxes"></div>
+    </div>
+
+    <label><strong>👤 Sesso:</strong>
+      <select id="sex">
+        <option value="">Tutti</option>
+        <option value="M">Maschi</option>
+        <option value="F">Femmine</option>
+      </select>
+    </label>
+
+    <label><strong>🥇 Medaglia:</strong>
+      <select id="medal">
+        <option value="">Tutte</option>
+        <option value="Gold">Oro</option>
+        <option value="Silver">Argento</option>
+        <option value="Bronze">Bronzo</option>
+      </select>
+    </label>
+
+    <label><strong>🏅 Sport:</strong>
+      <select id="category">
+        <option value="">Tutti</option>
+      </select>
+    </label>
+  </div>
+
+  <svg id="map"></svg>
+
+  <script>
+
+    const iconMap = {
+      "Athletics": "athletics2.png",
+      "Swimming": "swimming2.png",
+      "Fighting": "fighting2.png",
+      "Gymnastics": "gymnastics1.png",
+      "Racquet": "racquet1.png",
+      "Boating": "boating1.png",
+      "Equestrian": "equestrian1.png",
+      "Shooting": "shooting2.png",
+      "Teams": "teams2.png",
+      "Other": "other2.png"
+    };
+
+    const width = window.innerWidth;
+    const height = Math.min(window.innerHeight, width * 9 / 16);
+
+    const svg = d3.select("#map")
+      .attr("viewBox", [0, 0, width, height])
+      .attr("preserveAspectRatio", "xMidYMid meet");
+
+    const projection = d3.geoNaturalEarth1()
+      .scale(width / 6.3)
+      .translate([width / 2, height / 2.1]);
+
+    const path = d3.geoPath(projection);
+    const zoomLayer = svg.append("g").attr("id", "zoomLayer");
+
+    svg.call(d3.zoom()
+      .scaleExtent([1, 8])
+      .on("zoom", (event) => {
+        zoomLayer.attr("transform", event.transform);
+      }));
+
+    /*
+    const colorMap = {
+      "europe": "#0000FF",
+      "africa": "#000000",
+      "americas": "#FF0000",
+      "north america": "#FF0000",
+      "south america": "#FF0000",
+      "asia": "#FFD700",
+      "oceania": "#008000",
+      "other": "#999999"
+    };
+    */
+    const colorMap = {
+      "europe": "#0000FF",
+      /*"africa": "#F30FFF",*/
+      "africa": "#04FB3D",
+      "americas": "#FF0000",
+      "north america": "#FF0000",
+      "south america": "#FF0000",
+      "asia": "#FFDD00",
+      "oceania": "#FFFFFF",
+      "other": "#999999"
+    };
+
+
+    let bubbleData = [];
+    let uniqueYears = [];
+
+    function getSelectedYears() {
+      return Array.from(document.querySelectorAll(".yearCheck")).filter(cb => cb.checked).map(cb => +cb.value);
+    }
+
+    function toggleYears(selectAll) {
+      document.querySelectorAll(".yearCheck").forEach(cb => {
+        cb.checked = selectAll;
+      });
+      updateBubbles();
+    }
+
+    function showLegend() {
+      const legendDiv = document.getElementById("legend");
+      legendDiv.innerHTML = ""; // svuota
+
+      Object.entries(iconMap).forEach(([category, iconPath]) => {
+        const item = document.createElement("div");
+        item.style.display = "flex";
+        item.style.alignItems = "center";
+        item.style.marginBottom = "4px";
+
+        const img = document.createElement("img");
+        img.src = "Icons/" + iconPath;
+        img.width = 16;
+        img.height = 16;
+        img.style.marginRight = "6px";
+
+        const label = document.createElement("span");
+        label.textContent = category;
+
+        item.appendChild(img);
+        item.appendChild(label);
+        legendDiv.appendChild(item);
+      });
+
+      legendDiv.style.display = "block";
+    }
+
+
+    function updateBubbles() {
+      const years = getSelectedYears();
+      const sex = document.getElementById("sex").value;
+      const medal = document.getElementById("medal").value;
+      const category = document.getElementById("category").value;
+
+      if (years.length === 0) {
+        zoomLayer.selectAll("circle").remove();
+        return;
+      }
+
+      let filtered = bubbleData.filter(d => years.includes(+d.year));
+      if (sex) filtered = filtered.filter(d => d.sex === (sex === "M" ? "Male" : "Female"));
+      if (medal) filtered = filtered.filter(d => d.medal === medal);
+      if (category) filtered = filtered.filter(d => d.category === category);
+
+      const aggregated = d3.rollups(filtered, v => v.length, d => d.country, d => d.name, d => d.lon, d => d.lat, d => d.continent)
+        .map(([country, nameMap]) => {
+          const [[name, [[lon, [[lat, [[continent, value]]]]]]]] = nameMap;
+          return { country, name, lon, lat, continent, value };
+        });
+
+      const radius = d3.scaleSqrt().range([0, 40]).domain([0, d3.max(aggregated, d => d.value)]);
+
+      const bubbles = zoomLayer.selectAll("circle").data(aggregated, d => d.country);
+
+      bubbles.join(
+        enter => enter.append("circle")
+          .attr("class", "bubble")
+          .attr("transform", d => `translate(${projection([d.lon, d.lat])})`)
+          .attr("r", 0)
+          .attr("fill", d => {
+            const cleaned = (d.continent || "other").trim().toLowerCase();
+            return colorMap[cleaned] || colorMap["other"];
+          })
+          //.attr("style", "mix-blend-mode: screen;") // blend con sfondo
+          .style("filter", "drop-shadow(0px 0px 1px white)") // glow leggero
+
+          .on("mouseover", function (event, d) {
+            d3.select("#tooltip")
+              .style("display", "block")
+              .html(`<strong>${d.name}</strong><br>${d.value} medaglie`);
+          })
+          .on("mousemove", function (event) {
+            d3.select("#tooltip")
+              .style("left", (event.pageX + 10) + "px")
+              .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mouseout", function () {
+            d3.select("#tooltip").style("display", "none");
+          })
+          /*
+          .transition().duration(600)
+          .attr("r", d => radius(d.value))
+          */
+
+          .on("click", function (event, d) {
+            const code = d.country;
+
+            // Se non definito globalmente, fallo ora
+            if (typeof selectedCountries === 'undefined') window.selectedCountries = [];
+
+            // Se già selezionato, ignora
+            if (!selectedCountries.includes(code)) {
+              selectedCountries.push(code);
+
+              d3.select(this)
+                .attr("stroke", "#000")
+                .attr("stroke-width", 2)
+                .attr("fill-opacity", 1);
+            }
+
+            // Se più di 2, resetta
+            if (selectedCountries.length > 2) {
+              selectedCountries = [];
+              zoomLayer.selectAll(".bubble")
+                .attr("stroke", "#333")
+                .attr("stroke-width", 0.5)
+                .attr("fill-opacity", 0.7);
+              document.getElementById("chart-container").style.display = "flex";
+              document.getElementById("controls").style.display = "block";
+              document.getElementById("legend").style.display = "none";
+              return;
+            }
+
+            // Se esattamente due, mostra il confronto
+            if (selectedCountries.length === 2) {
+              document.getElementById("chart-container").style.display = "flex";
+              document.getElementById("controls").style.display = "none";
+              document.getElementById("legend").style.display = "block";
+
+              showLegend();
+
+              const country1 = selectedCountries[0];
+              const country2 = selectedCountries[1];
+
+              const data1 = bubbleDataDetailed.filter(x => x.country === country1);
+              const data2 = bubbleDataDetailed.filter(x => x.country === country2);
+
+              let summary1 = aggregateForRadialChart(data1);
+              let summary2 = aggregateForRadialChart(data2);
+              [summary1, summary2] = normalizeCategories(summary1, summary2);
+              const allCategories = summary1.map(d => d.category);  // ora sono identiche
+
+              // Calcola il valore massimo tra i due dataset
+              const getMax = data => d3.max(data, d =>
+                d.gold_M + d.gold_F + d.silver_M + d.silver_F + d.bronze_M + d.bronze_F
+              );
+              const globalMax = Math.max(getMax(summary1), getMax(summary2));
+
+              drawRadialStackedBarChart("#chart1", summary1, country1, allCategories, globalMax);
+              drawRadialStackedBarChart("#chart2", summary2, country2, allCategories, globalMax);
+            }
+          })
+          //.call(enter => enter.append("title").text(d => `${d.name}: ${d.value} medaglie`))
+          .transition().duration(600)
+          .attr("r", d => radius(d.value)),
+
+        update => update.transition().duration(600)
+          .attr("transform", d => `translate(${projection([d.lon, d.lat])})`)
+          .attr("r", d => radius(d.value))
+          .call(update => update.select("title").text(d => `${d.name}: ${d.value} medaglie`)),
+
+        exit => exit.transition().duration(300).attr("r", 0).remove()
+      );
+
+
+    }
+
+    Promise.all([
+      d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"),
+      d3.json("bubble_data_detailed.json?v=" + Date.now())
+    ]).then(([worldData, rawData]) => {
+      bubbleData = rawData;
+      bubbleDataDetailed = rawData;  // Per il radial chart
+      uniqueYears = Array.from(new Set(bubbleData.map(d => d.year))).sort((a, b) => b - a);
+
+      const catSet = new Set(bubbleData.map(d => d.category));
+      const catSelect = document.getElementById("category");
+      let categories = Array.from(catSet);
+      categories = categories.filter(s => s !== "Other").sort();
+      categories.push("Other");
+      categories.forEach(s => {
+        const option = document.createElement("option");
+        option.value = s;
+        option.textContent = s;
+        catSelect.appendChild(option);
+      });
+      catSelect.addEventListener("change", updateBubbles);
+
+      const countries = topojson.feature(worldData, worldData.objects.countries);
+      countries.features = countries.features.filter(d => d.properties.name !== "Antarctica");
+
+      zoomLayer.append("g")
+        .selectAll("path")
+        .data(countries.features)
+        .join("path")
+        .attr("d", path)
+        .attr("class", "country");
+
+      const yearContainer = document.getElementById("yearCheckboxes");
+      uniqueYears.forEach(year => {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.className = "yearCheck";
+        input.value = year;
+        input.checked = true;
+        input.addEventListener("change", () => setTimeout(updateBubbles, 0));
+        label.appendChild(input);
+        label.append(` ${year}`);
+        yearContainer.appendChild(label);
+        yearContainer.appendChild(document.createElement("br"));
+      });
+
+      document.getElementById("selectAllYears").addEventListener("click", () => {
+        toggleYears(true);
+      });
+
+      document.getElementById("deselectAllYears").addEventListener("click", () => {
+        toggleYears(false);
+      });
+
+      document.getElementById("sex").addEventListener("change", updateBubbles);
+      document.getElementById("medal").addEventListener("change", updateBubbles);
+
+      updateBubbles();
+    });
+
+
+
+    function normalizeCategories(summary1, summary2) {
+      const allCategories = Array.from(new Set([
+        ...summary1.map(d => d.category),
+        ...summary2.map(d => d.category)
+      ])).sort();
+
+      function fillMissing(summary) {
+        const summaryMap = Object.fromEntries(summary.map(d => [d.category, d]));
+        return allCategories.map(cat => summaryMap[cat] || {
+          category: cat,
+          gold_M: 0, gold_F: 0,
+          silver_M: 0, silver_F: 0,
+          bronze_M: 0, bronze_F: 0
+        });
+      }
+
+      return [fillMissing(summary1), fillMissing(summary2)];
+    }
+
+
+    function aggregateForRadialChart(data) {
+      const result = d3.rollups(
+        data.filter(d => d.medal !== null && d.category),  // filtriamo solo quelli con medaglia assegnata e categoria valida
+        group => {
+          const entry = {
+            gold_M: 0, gold_F: 0,
+            silver_M: 0, silver_F: 0,
+            bronze_M: 0, bronze_F: 0
+          };
+          group.forEach(d => {
+            const sex = d.sex === "Male" ? "M" : "F";
+            if (d.medal === "Gold") entry[`gold_${sex}`]++;
+            if (d.medal === "Silver") entry[`silver_${sex}`]++;
+            if (d.medal === "Bronze") entry[`bronze_${sex}`]++;
+          });
+          return entry;
+        },
+        d => d.category
+      );
+
+      return result.map(([category, counts]) => ({ category, ...counts }));
+    }
+
+
+    function drawRadialStackedBarChart(svgId, data, countryCode, allCategories, maxValGlobal) {
+      const width = 460;
+      const height = 460;
+      const innerRadius = 100;
+      const outerRadius = Math.min(width, height) / 2 - 10;
+
+      const svg = d3.select(svgId)
+        .attr("width", width)
+        .attr("height", height)
+        .attr("viewBox", [-width / 2, -height / 2, width, height]);
+
+      const categories = allCategories;
+      const keys = ["bronze", "silver", "gold"];
+
+      const color = d3.scaleOrdinal()
+        .domain(keys)
+        .range(["#b87333", "#bbbbbb", "#ffdd55"]);
+      /*.range(["#6A3805", "#B4B4B4", "#C9B037"]);*/
+
+      const arc = d3.arc()
+        .innerRadius(d => y(d[0]))
+        .outerRadius(d => y(d[1]))
+        .startAngle(d => x(d.data.category))
+        .endAngle(d => x(d.data.category) + x.bandwidth())
+        .padAngle(0.01)
+        .padRadius(innerRadius);
+
+      const x = d3.scaleBand()
+        .domain(categories)
+        .range([0, 2 * Math.PI])
+        .align(0);
+
+      const stackedData = d3.stack()
+        .keys(keys.flatMap(k => [k + "_M", k + "_F"]))
+        .value((d, key) => d[key])(data);
+
+      const maxVal = d3.max(stackedData, d => d3.max(d, d => d[1]));
+
+      const y = d3.scaleRadial()
+        .domain([0, maxValGlobal])
+        .range([innerRadius, outerRadius]);
+
+
+      svg.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dy", "0.35em")
+        .attr("font-size", "24px")
+        .attr("fill", "#fff")
+        .text(countryCode);
+
+      svg.append("g")
+        .selectAll("g")
+        .data(stackedData)
+        .join("g")
+        .attr("fill", d => {
+          const medal = d.key.split("_")[0];
+          return color(medal);
+        })
+        .selectAll("path")
+        .data(d => d)
+        .join("path")
+        .attr("d", arc)
+        /*
+        .append("title")
+        .text(d => `${d.data.category}: ${d[1] - d[0]} medaglie`);
+        */
+        .on("mouseover", function(event, d) {
+  d3.select("#tooltip")
+    .style("display", "block")
+    .html(`<strong>${d.data.category}</strong><br>${d[1] - d[0]} medaglie`);
+})
+.on("mousemove", function(event) {
+  d3.select("#tooltip")
+    .style("left", (event.pageX + 10) + "px")
+    .style("top", (event.pageY - 28) + "px");
+})
+.on("mouseout", function() {
+  d3.select("#tooltip").style("display", "none");
+});
+
+
+
+      svg.append("g")
+        .selectAll("g")
+        .data(categories)
+        .join("g")
+        .attr("transform", d => `
+    rotate(${(x(d) + x.bandwidth() / 2) * 180 / Math.PI - 90})
+    translate(${innerRadius - 20}, 0)
+  `)
+        .append("image")
+        .attr("xlink:href", d => `Icons/${iconMap[d]}`)
+        .attr("width", 24)
+        .attr("height", 24)
+        .attr("x", -12) // centrare
+        .attr("y", -12)
+        .attr("transform", d => `
+      rotate(${-(x(d) + x.bandwidth() / 2) * 180 / Math.PI + 90})
+    `);
+
+
+      // Anelli radiali con etichette
+      svg.append("g")
+        .attr("text-anchor", "middle")
+        .selectAll("g")
+        .data(y.ticks(5).slice(1))
+        .join("g")
+        .call(g => g.append("circle")
+          .attr("fill", "none")
+          .attr("stroke", "#fff")
+          .attr("stroke-opacity", 0.4)
+          .attr("r", y))
+        .call(g => g.append("text")
+          .attr("y", d => -y(d))
+          .attr("dy", "-0.35em")
+          .attr("fill", "#ddd")
+          .attr("font-size", "10px")
+          .text(d => d));
+
+    }
+
+
+  </script>
+
+  <div id="legend" style="
+  position: absolute;
+  color: #ddd;
+  top: 10px;
+  right: 10px;
+  background: #525252;
+  border: 1px solid #ccc;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  display: none;
+  z-index: 20;
+"></div>
+
+</body>
+
+</html>
