@@ -157,6 +157,39 @@
 
 <body>
 
+
+  <div id="sex-legend"
+    style="position: absolute; top: 10px; left: 10px; background: #333; color: white; padding: 10px; font-size: 14px; border-radius: 6px; display: none;">
+    <div style="margin-bottom: 5px;"><strong>Legenda Medaglie/Sesso</strong></div>
+    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+      <div style="width: 14px; height: 14px; background: #806040; border-radius: 2px;"></div>
+      <span>Bronzo (M)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+      <div style="width: 14px; height: 14px; background: #c88c66; border-radius: 2px;"></div>
+      <span>Bronzo (F)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+      <div style="width: 14px; height: 14px; background: #999999; border-radius: 2px;"></div>
+      <span>Argento (M)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+      <div style="width: 14px; height: 14px; background: #e0e0e0; border-radius: 2px;"></div>
+      <span>Argento (F)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="width: 14px; height: 14px; background: #ccaa00; border-radius: 2px;"></div>
+      <span>Oro (M)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="width: 14px; height: 14px; background: #ffee77; border-radius: 2px;"></div>
+      <span>Oro (F)</span>
+    </div>
+  </div>
+
+
+
+
   <div id="tooltip" style="
   position: absolute;
   padding: 6px 10px;
@@ -395,6 +428,7 @@
               document.getElementById("chart-container").style.display = "flex";
               document.getElementById("controls").style.display = "block";
               document.getElementById("legend").style.display = "none";
+              document.getElementById("sex-legend").style.display = "none";
               return;
             }
 
@@ -403,6 +437,7 @@
               document.getElementById("chart-container").style.display = "flex";
               document.getElementById("controls").style.display = "none";
               document.getElementById("legend").style.display = "block";
+              document.getElementById("sex-legend").style.display = "block";
 
               showLegend();
 
@@ -580,9 +615,20 @@
         .range([0, 2 * Math.PI])
         .align(0);
 
+      const baseColor = d3.scaleOrdinal()
+        .domain(["bronze", "silver", "gold"])
+        .range(["#b87333", "#bbbbbb", "#ffdd55"]);
+
       const stackedData = d3.stack()
         .keys(keys.flatMap(k => [k + "_M", k + "_F"]))
         .value((d, key) => d[key])(data);
+
+      const fill = d => {
+        const [medal, sex] = d.key.split("_");
+        return d3.color(baseColor(medal)).darker(sex === "M" ? 0.5 : -0.5);  // maschi = più scuro
+        console.log(d.key, c); // 👈 test
+        return c;
+      }
 
       const maxVal = d3.max(stackedData, d => d3.max(d, d => d[1]));
 
@@ -602,10 +648,12 @@
         .selectAll("g")
         .data(stackedData)
         .join("g")
+        .attr("fill", fill)
+        /*
         .attr("fill", d => {
           const medal = d.key.split("_")[0];
           return color(medal);
-        })
+        })*/
         .selectAll("path")
         .data(d => d)
         .join("path")
@@ -614,19 +662,19 @@
         .append("title")
         .text(d => `${d.data.category}: ${d[1] - d[0]} medaglie`);
         */
-        .on("mouseover", function(event, d) {
-  d3.select("#tooltip")
-    .style("display", "block")
-    .html(`<strong>${d.data.category}</strong><br>${d[1] - d[0]} medaglie`);
-})
-.on("mousemove", function(event) {
-  d3.select("#tooltip")
-    .style("left", (event.pageX + 10) + "px")
-    .style("top", (event.pageY - 28) + "px");
-})
-.on("mouseout", function() {
-  d3.select("#tooltip").style("display", "none");
-});
+        .on("mouseover", function (event, d) {
+          d3.select("#tooltip")
+            .style("display", "block")
+            .html(`<strong>${d.data.category}</strong><br>${d[1] - d[0]} medaglie`);
+        })
+        .on("mousemove", function (event) {
+          d3.select("#tooltip")
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", function () {
+          d3.select("#tooltip").style("display", "none");
+        });
 
 
 
