@@ -626,7 +626,7 @@
       const fill = d => {
         const [medal, sex] = d.key.split("_");
         return d3.color(baseColor(medal)).darker(sex === "M" ? 0.5 : -0.5);  // maschi = più scuro
-        console.log(d.key, c); // 👈 test
+        console.log(d.key, c); // test
         return c;
       }
 
